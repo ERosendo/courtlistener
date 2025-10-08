@@ -113,6 +113,7 @@
             </ul>
         </div>
     </div>
+    {% include "includes/pagination.html" with page_obj=authorities_with_data %}
 {% elif tab == "cited-by" %}
     {# Cited By #}
     <div class="tab-pane fade in active" id="cited-by">
