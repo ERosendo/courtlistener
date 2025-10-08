@@ -14,6 +14,7 @@ class WebhookEventType(models.IntegerChoices):
     SEARCH_ALERT = 2, "Search Alert"
     RECAP_FETCH = 3, "Recap Fetch"
     OLD_DOCKET_ALERTS_REPORT = 4, "Old Docket Alerts Report"
+    GRANTED_PRAYER = 5, "Granted Prayers"
 
 
 class WebhookVersions(models.IntegerChoices):
