@@ -10,6 +10,7 @@ from django.db.models import (
     Case,
     Count,
     F,
+    Prefetch,
     Q,
     QuerySet,
     Subquery,
@@ -20,7 +21,11 @@ from django.db.models import (
 from django.db.models.functions import Least
 from django.template import loader
 from django.utils import timezone
+from rest_framework.renderers import JSONRenderer
 
+from cl.api.models import Webhook, WebhookEvent, WebhookEventType
+from cl.api.utils import generate_webhook_key_content
+from cl.api.webhooks import send_webhook_event
 from cl.custom_filters.templatetags.pacer import price
 from cl.favorites.models import Prayer, PrayerAvailability
 from cl.search.models import RECAPDocument
@@ -258,16 +263,27 @@ async def compute_prayer_total_cost(queryset: QuerySet[Prayer]) -> float:
 
 
 def send_prayer_emails(instance: RECAPDocument) -> None:
-    open_prayers = Prayer.objects.filter(
-        recap_document=instance, status=Prayer.WAITING
-    ).select_related("user")
+    open_prayers = (
+        Prayer.objects.filter(recap_document=instance, status=Prayer.WAITING)
+        .select_related("user")
+        .prefetch_related(
+            Prefetch(
+                "user__webhooks",
+                queryset=Webhook.objects.filter(
+                    event_type=WebhookEventType.GRANTED_PRAYER
+                ),
+                to_attr="granted_prayer_webhooks",
+            )
+        )
+    )
     # Retrieve email recipients before updating granted prayers.
     email_recipients = [
         {
-            "email": prayer["user__email"],
-            "date_created": prayer["date_created"],
+            "email": prayer.user.email,
+            "date_created": prayer.date_created,
+            "webhook": prayer.user.granted_prayer_webhooks[0],
         }
-        for prayer in open_prayers.values("user__email", "date_created")
+        for prayer in open_prayers
     ]
     open_prayers.update(status=Prayer.GRANTED)
 
@@ -309,6 +325,30 @@ def send_prayer_emails(instance: RECAPDocument) -> None:
             )
             msg.attach_alternative(html, "text/html")
             messages.append(msg)
+
+            if email_recipient["webhook"]:
+                post_content = {
+                    "webhook": generate_webhook_key_content(
+                        email_recipient["webhook"]
+                    ),
+                    # I was not sure about the payload when i did this but I'll
+                    # add it to the issue description
+                    "payload": {
+                        "document": {},
+                    },
+                }
+                renderer = JSONRenderer()
+                json_bytes = renderer.render(
+                    post_content,
+                    accepted_media_type="application/json;",
+                )
+
+                webhook_event = WebhookEvent.objects.create(
+                    webhook=email_recipient["webhook"],
+                    content=post_content,
+                )
+                send_webhook_event(webhook_event, json_bytes)
+
         connection = get_connection()
         connection.send_messages(messages)
 
