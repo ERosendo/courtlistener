@@ -1129,8 +1129,23 @@ async def view_opinion_authorities(
         pk=pk,
     )
 
+    page = request.GET.get("page", "1")
+
+    @sync_to_async
+    def paginate_authorities(authorities_queryset, page):
+        paginator = Paginator(authorities_queryset, 20)
+        try:
+            return paginator.page(page)
+        except PageNotAnInteger:
+            return paginator.page(1)
+        except EmptyPage:
+            return paginator.page(paginator.num_pages)
+
+    paginated_authorities = await paginate_authorities(
+        await cluster.aauthorities_with_data(), page
+    )
     additional_context = {
-        "authorities_with_data": await cluster.aauthorities_with_data(),
+        "authorities_with_data": paginated_authorities,
     }
     return await render_opinion_view(
         request, cluster, "authorities", additional_context
