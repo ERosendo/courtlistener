@@ -186,6 +186,20 @@ class WebhooksViewSet(ModelViewSet):
                 event_dummy_curl = event_curl_template.render(
                     {"endpoint_url": webhook.url, "webhook_version": version}
                 ).strip()
+            case WebhookEventType.GRANTED_PRAYER:
+                event_template = loader.get_template(
+                    "includes/granted_prayer_webhook_dummy.txt"
+                )
+                print(event_template)
+                event_dummy_content = event_template.render(
+                    {"webhook_version": version}
+                ).strip()
+                event_curl_template = loader.get_template(
+                    "includes/granted_prayer_webhook_dummy_curl.txt"
+                )
+                event_dummy_curl = event_curl_template.render(
+                    {"endpoint_url": webhook.url, "webhook_version": version}
+                ).strip()
             case _:
                 # Webhook types with no support yet.
                 event_dummy_content = (
